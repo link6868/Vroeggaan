@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Tabel met Score en Automatisch Sorteren</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      max-width: 700px;
+      margin: auto;
+    }
+    input[type="text"], input[type="number"] {
+      padding: 8px;
+      margin-right: 10px;
+      width: 120px;
+    }
+    button {
+      padding: 8px 12px;
+      margin-top: 10px;
+      cursor: pointer;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      padding: 10px;
+      border: 1px solid #ccc;
+      text-align: center;
+    }
+    tr:nth-child(even) {
+      background-color: #f9f9f9;
+    }
+    .delete-btn {
+      background-color: #e74c3c;
+      color: white;
+      border: none;
+      padding: 4px 8px;
+      cursor: pointer;
+      font-weight: bold;
+      border-radius: 4px;
+    }
+    #controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    #importFileInput {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h2>Voeg een naam toe</h2>
+  
+  <div id="controls">
+    <input type="text" id="nameInput" placeholder="Naam" />
+    <button onclick="addRow()">Toevoegen</button>
+    <button onclick="exportData()">Export</button>
+    <button onclick="document.getElementById('importFileInput').click()">Import</button>
+    <input type="file" id="importFileInput" accept=".json" onchange="importData(event)" />
+  </div>
+
+  <table id="dataTable">
+    <thead>
+      <tr>
+        <th>Naam</th>
+        <th>Score</th>
+        <th>Kwartieren weg</th>
+        <th>Gebleven</th>
+        <th>Verwijderen</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- Rijen komen hier -->
+    </tbody>
+  </table>
+
+  <script>
+    function roundToTwo(num) {
+      return Math.round(num * 100) / 100;
+    }
+
+    function saveToLocalStorage() {
+      const tableBody = document.getElementById("dataTable").getElementsByTagName("tbody")[0];
+      const rows = Array.from(tableBody.rows);
+      const data = rows.map(row => {
+        return {
+          naam: row.cells[0].textContent,
+          kwartieren: parseInt(row.cells[2].querySelector("input").value) || 0,
+          gebleven: parseInt(row.cells[3].querySelector("input").value) || 0
+        };
+      });
+      localStorage.setItem("scoreData", JSON.stringify(data));
+    }
+
+    function loadFromLocalStorage() {
+      const jsonStr = localStorage.getItem("scoreData");
+      if (!jsonStr) return;
+
+      try {
+        const data = JSON.parse(jsonStr);
+        if (!Array.isArray(data)) return;
+
+        const tableBody = document.getElementById("dataTable").getElementsByTagName("tbody")[0];
+        tableBody.innerHTML = "";
+
+        data.forEach(item => {
+          addRow(item.naam, item.kwartieren, item.gebleven);
+        });
+      } catch (err) {
+        console.error("Fout bij laden van localStorage:", err.message);
+      }
+    }
+
+    function addRow(name = null, kwartieren = 0, gebleven = 0) {
+      const nameInput = document.getElementById("nameInput");
+      const nameValue = name !== null ? name : nameInput.value.trim();
+      if (nameValue === "") return;
+
+      const tableBody = document.getElementById("dataTable").getElementsByTagName("tbody")[0];
+      const row = document.createElement("tr");
+
+      const nameCell = document.createElement("td");
+      nameCell.textContent = nameValue;
+      row.appendChild(nameCell);
+
+      const scoreCell = document.createElement("td");
+      scoreCell.textContent = "0";
+      row.appendChild(scoreCell);
+
+      const awayCell = document.createElement("td");
+      const awayInput = document.createElement("input");
+      awayInput.type = "number";
+      awayInput.min = "0";
+      awayInput.value = kwartieren;
+      awayInput.style.width = "60px";
+      awayInput.addEventListener("input", updateScore);
+      awayCell.appendChild(awayInput);
+      row.appendChild(awayCell);
+
+      const stayedCell = document.createElement("td");
+      const stayedInput = document.createElement("input");
+      stayedInput.type = "number";
+      stayedInput.min = "0";
+      stayedInput.value = gebleven;
+      stayedInput.style.width = "60px";
+      stayedInput.addEventListener("input", updateScore);
+      stayedCell.appendChild(stayedInput);
+      row.appendChild(stayedCell);
+
+      const deleteCell = document.createElement("td");
+      const deleteBtn = document.createElement("button");
+      deleteBtn.textContent = "✖";
+      deleteBtn.className = "delete-btn";
+      deleteBtn.addEventListener("click", () => {
+        if (confirm(`Weet je zeker dat je "${nameValue}" wilt verwijderen?`)) {
+          row.remove();
+          saveToLocalStorage();
+        }
+      });
+      deleteCell.appendChild(deleteBtn);
+      row.appendChild(deleteCell);
+
+      function updateScore() {
+        const away = parseFloat(awayInput.value);
+        const stayed = parseFloat(stayedInput.value);
+        if (!isNaN(away) && away !== 0 && !isNaN(stayed)) {
+          const score = roundToTwo((stayed * 16) / away);
+          scoreCell.textContent = score;
+        } else {
+          scoreCell.textContent = "0";
+        }
+        saveToLocalStorage();
+      }
+
+      updateScore();
+      tableBody.appendChild(row);
+
+      if(name === null) {
+        nameInput.value = "";
+      }
+
+      sortTableByLastName();
+      saveToLocalStorage();
+    }
+
+    function sortTableByLastName() {
+      const tableBody = document.getElementById("dataTable").getElementsByTagName("tbody")[0];
+      const rows = Array.from(tableBody.rows);
+
+      rows.sort((a, b) => {
+        const aName = a.cells[0].textContent.trim();
+        const bName = b.cells[0].textContent.trim();
+        const aLast = aName.split(" ").slice(-1)[0].toLowerCase();
+        const bLast = bName.split(" ").slice(-1)[0].toLowerCase();
+        return aLast.localeCompare(bLast);
+      });
+
+      rows.forEach(row => tableBody.appendChild(row));
+    }
+
+    function exportData() {
+      const tableBody = document.getElementById("dataTable").getElementsByTagName("tbody")[0];
+      const rows = Array.from(tableBody.rows);
+      const data = rows.map(row => {
+        return {
+          naam: row.cells[0].textContent,
+          kwartieren: parseInt(row.cells[2].querySelector("input").value) || 0,
+          gebleven: parseInt(row.cells[3].querySelector("input").value) || 0
+        };
+      });
+
+      const jsonStr = JSON.stringify(data, null, 2);
+      const blob = new Blob([jsonStr], {type: "application/json"});
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "backup.json";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function importData(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const data = JSON.parse(e.target.result);
+          if (!Array.isArray(data)) throw new Error("Ongeldig formaat");
+
+          const tableBody = document.getElementById("dataTable").getElementsByTagName("tbody")[0];
+          tableBody.innerHTML = "";
+
+          data.forEach(item => {
+            addRow(item.naam, item.kwartieren, item.gebleven);
+          });
+          saveToLocalStorage();
+        } catch(err) {
+          alert("Fout bij importeren: " + err.message);
+        }
+      };
+      reader.readAsText(file);
+      event.target.value = "";
+    }
+
+    window.addEventListener("load", loadFromLocalStorage);
+  </script>
+</body>
+</html>
